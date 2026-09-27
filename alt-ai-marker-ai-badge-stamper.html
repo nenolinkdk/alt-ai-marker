@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ALT-AI Marker</title>
+<style>
+  :root { font-family: Inter, "Segoe UI", system-ui, sans-serif; background:#0f172a; color:#e2e8f0; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; }
+  aside { width:340px; padding:20px; background:#111827; border-right:1px solid #1e293b; overflow-y:auto; }
+  main { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; }
+  h1 { font-size:20px; margin:0 0 16px; display:flex; align-items:center; gap:8px; }
+  h1 svg { width:24px; height:24px; }
+  label { display:block; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; margin:16px 0 6px; }
+  input[type=range] { width:100%; accent-color:#38bdf8; }
+  .val { color:#38bdf8; font-weight:600; float:right; text-transform:none; }
+  select, button { width:100%; padding:10px; border-radius:8px; border:1px solid #334155; background:#1e293b; color:#e2e8f0; font-size:14px; cursor:pointer; }
+  .btn-primary { background:#0284c7; border:none; font-weight:600; margin-top:20px; padding:12px; }
+  .btn-primary:hover { background:#0ea5e9; }
+  .btn-primary:disabled { background:#334155; cursor:not-allowed; }
+  .btn-ghost { background:transparent; border:1px dashed #475569; margin-top:10px; }
+  .btn-ghost:hover { border-color:#38bdf8; }
+  #drop { border:2px dashed #334155; border-radius:12px; padding:48px 32px; text-align:center; color:#64748b; cursor:pointer; transition:.2s; max-width:640px; width:100%; }
+  #drop.over, #drop:hover { border-color:#38bdf8; color:#38bdf8; }
+  #previewWrap { position:relative; max-width:100%; display:none; }
+  #preview { max-width:100%; max-height:80vh; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,.5); display:block; }
+  #count { margin-top:12px; font-size:13px; color:#94a3b8; }
+  #status { margin-top:12px; font-size:13px; min-height:20px; }
+  .ok { color:#4ade80; } .err { color:#f87171; }
+  .badge-style { display:flex; gap:8px; margin-top:4px; }
+  .badge-style button { flex:1; padding:8px; font-size:12px; }
+  .badge-style button.active { background:#0284c7; border-color:#38bdf8; }
+  .lang { font-size:12px; color:#64748b; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<aside>
+  <h1><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" fill="#38bdf8"/><path d="M19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9L19 15z" fill="#38bdf8"/></svg><span id="t_title">ALT-AI Marker</span></h1>
+
+  <label id="t_lang_label">Language / Sprog</label>
+  <select id="lang"><option value="en">English</option><option value="da">Dansk</option></select>
+
+  <label id="t_open">Open images</label>
+  <button class="btn-ghost" id="pickBtn">Choose images…</button>
+  <input type="file" id="fileInput" accept="image/*" multiple hidden />
+  <div id="count"></div>
+
+  <label id="t_style">Badge style</label>
+  <div class="badge-style">
+    <button data-style="label" class="active">✦ AI label</button>
+    <button data-style="icon">✦ Icon only</button>
+  </div>
+
+  <label id="t_pos">Position</label>
+  <select id="corner">
+    <option value="br" data-i18n>Bottom right</option>
+    <option value="bl" data-i18n>Bottom left</option>
+    <option value="tr" data-i18n>Top right</option>
+    <option value="tl" data-i18n>Top left</option>
+  </select>
+
+  <label id="t_size">Badge size <span class="val" id="sizeVal">4%</span></label>
+  <input type="range" id="size" min="2" max="12" step="0.5" value="4" />
+
+  <label id="t_margin">Margin <span class="val" id="marginVal">2%</span></label>
+  <input type="range" id="margin" min="0" max="10" step="0.5" value="2" />
+
+  <label id="t_alpha">Transparency <span class="val" id="alphaVal">0%</span></label>
+  <input type="range" id="alpha" min="0" max="90" step="5" value="0" />
+
+  <label id="t_color">Badge color</label>
+  <select id="color">
+    <option value="#000000" data-i18n>Black</option>
+    <option value="#ffffff" data-i18n>White</option>
+    <option value="#0ea5e9" data-i18n>Sky blue</option>
+    <option value="#22c55e" data-i18n>Green</option>
+    <option value="#ef4444" data-i18n>Red</option>
+    <option value="#f59e0b" data-i18n>Amber</option>
+  </select>
+
+  <button class="btn-primary" id="saveBtn" disabled>Save as …_ai</button>
+  <div id="status"></div>
+</aside>
+
+<main>
+  <div id="drop">
+    <div style="font-size:44px;">🖼️</div>
+    <p id="t_drop"><b>Drag &amp; drop images here</b><br/>or use “Choose images…” on the left.<br/>JPG, PNG, WebP, GIF · batch supported</p>
+  </div>
+  <div id="previewWrap"><canvas id="preview"></canvas></div>
+</main>
+
+<script>
+const I18N = {
+  en: { title:"ALT-AI Marker", lang:"Language / Sprog", open:"Open images", pick:"Choose images…",
+    style:"Badge style", pos:"Position", size:"Badge size", margin:"Margin", alpha:"Transparency",
+    color:"Badge color", save:"Save as …_ai", corner:["Bottom right","Bottom left","Top right","Top left"],
+    colors:["Black","White","Sky blue","Green","Red","Amber"],
+    drop:"<b>Drag &amp; drop images here</b><br/>or use “Choose images…” on the left.<br/>JPG, PNG, WebP, GIF · batch supported",
+    loaded:n=>n+(n===1?" image":" images")+" loaded", noimg:"No image files found.",
+    saved:(ok,fail)=>`Saved ${ok} file${ok!==1?"s":""}${fail?`, ${fail} failed`:""} with _ai suffix.`,
+    batch:(name,i,n)=>`${name}  (${i+1}/${n}) — ← → to browse` },
+  da: { title:"ALT-AI Marker", lang:"Sprog", open:"Åbn billeder", pick:"Vælg billeder…",
+    style:"Mærkestil", pos:"Placering", size:"Mærkestørrelse", margin:"Margen", alpha:"Gennemsigtighed",
+    color:"Mærkefarve", save:"Gem som …_ai", corner:["Nederst til højre","Nederst til venstre","Øverst til højre","Øverst til venstre"],
+    colors:["Sort","Hvid","Himmelblå","Grøn","Rød","Rav"],
+    drop:"<b>Træk &amp; slip billeder her</b><br/>eller brug “Vælg billeder…” til venstre.<br/>JPG, PNG, WebP, GIF · batch understøttes",
+    loaded:n=>n+(n===1?" billede":" billeder")+" indlæst", noimg:"Ingen billedfiler fundet.",
+    saved:(ok,fail)=>`Gemte ${ok} ${ok===1?"fil":"filer"}${fail?`, ${fail} fejlede`:""} med _ai-suffiks.`,
+    batch:(name,i,n)=>`${name}  (${i+1}/${n}) — ← → for at bladre` }
+};
+
+const state = { files: [], idx: 0, style: "label", img: null, lang: "en" };
+const T = () => I18N[state.lang];
+
+const $ = id => document.getElementById(id);
+const drop = $("drop"), fileInput = $("fileInput"), preview = $("preview"),
+      previewWrap = $("previewWrap"), saveBtn = $("saveBtn"), status = $("status");
+
+function setStatus(msg, cls) { status.textContent = msg; status.className = cls || ""; }
+
+function applyLang() {
+  const t = T();
+  $("t_title").textContent = t.title;
+  $("t_lang_label").textContent = t.lang; $("t_open").textContent = t.open;
+  $("t_style").textContent = t.style; $("t_pos").textContent = t.pos;
+  $("t_size").firstChild.textContent = t.size + " "; $("t_margin").firstChild.textContent = t.margin + " ";
+  $("t_alpha").firstChild.textContent = t.alpha + " "; $("t_color").textContent = t.color;
+  $("pickBtn").textContent = t.pick; $("saveBtn").textContent = t.save;
+  $("t_drop").innerHTML = t.drop;
+  [...$("corner").options].forEach((o,i)=>o.textContent=t.corner[i]);
+  [...$("color").options].forEach((o,i)=>o.textContent=t.colors[i]);
+}
+
+function loadFiles(list) {
+  const imgs = [...list].filter(f => f.type.startsWith("image/"));
+  if (!imgs.length) { setStatus(T().noimg, "err"); return; }
+  state.files = imgs; state.idx = 0;
+  $("count").textContent = T().loaded(imgs.length);
+  showImage(0);
+}
+
+function showImage(i) {
+  state.idx = i;
+  const f = state.files[i];
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    state.img = img;
+    URL.revokeObjectURL(url);
+    drawPreview();
+    drop.style.display = "none";
+    previewWrap.style.display = "block";
+    saveBtn.disabled = false;
+    setStatus(state.files.length > 1 ? T().batch(f.name, i, state.files.length) : f.name, "ok");
+  };
+  img.src = url;
+}
+
+function badgeSpec(w, h) {
+  return {
+    size: (+$("size").value / 100) * Math.min(w, h),
+    margin: (+$("margin").value / 100) * Math.min(w, h),
+    alpha: 1 - (+$("alpha").value / 100),
+    corner: $("corner").value, color: $("color").value, style: state.style
+  };
+}
+
+function drawBadge(ctx, w, h, spec) {
+  const s = spec.size, m = spec.margin;
+  ctx.save();
+  ctx.globalAlpha = spec.alpha;
+  const dark = isDark(spec.color);
+  const ink = dark ? "#ffffff" : "#111827";
+
+  if (spec.style === "icon") {
+    const cx = spec.corner.includes("l") ? m + s/2 : w - m - s/2;
+    const cy = spec.corner.startsWith("t") ? m + s/2 : h - m - s/2;
+    drawSparkle(ctx, cx, cy, s/2, spec.color);
+  } else {
+    const fontPx = s * 0.55;
+    ctx.font = `700 ${fontPx}px Inter, "Segoe UI", sans-serif`;
+    const text = "AI";
+    const tw = ctx.measureText(text).width;
+    const iconW = fontPx * 0.9, gap = fontPx * 0.2;
+    const bw = s * 0.25 + iconW + gap + tw + s * 0.25;
+    const bh = s * 0.95;
+    const bx = spec.corner.includes("l") ? m : w - m - bw;
+    const by = spec.corner.startsWith("t") ? m : h - m - bh;
+
+    ctx.fillStyle = spec.color;
+    roundRect(ctx, bx, by, bw, bh, bh / 2);
+    ctx.fillStyle = ink;
+    const x = bx + s * 0.25;
+    drawSparkle(ctx, x + iconW/2, by + bh/2, iconW/2, ink);
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + iconW + gap, by + bh/2 + fontPx*0.05);
+  }
+  ctx.restore();
+}
+
+function drawSparkle(ctx, cx, cy, r, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const ang = -Math.PI/2 + i * Math.PI/4;
+    const rad = i % 2 === 0 ? r : r * 0.42;
+    const x = cx + Math.cos(ang) * rad, y = cy + Math.sin(ang) * rad;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function isDark(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return 0.299*(n>>16) + 0.587*((n>>8)&255) + 0.114*(n&255) < 128;
+}
+
+function drawPreview() {
+  const img = state.img;
+  const scale = Math.min(1, 900 / img.width);
+  preview.width = img.width * scale;
+  preview.height = img.height * scale;
+  const ctx = preview.getContext("2d");
+  ctx.drawImage(img, 0, 0, preview.width, preview.height);
+  drawBadge(ctx, preview.width, preview.height, badgeSpec(preview.width, preview.height));
+}
+
+function renderFull(img, spec) {
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const ctx = c.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  drawBadge(ctx, c.width, c.height, spec);
+  return c;
+}
+
+function aiName(name) {
+  const dot = name.lastIndexOf(".");
+  return name.slice(0, dot > 0 ? dot : undefined) + "_ai.png";
+}
+
+function saveOne(f, spec) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      renderFull(img, spec).toBlob(blob => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = aiName(f.name);
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        resolve(f.name);
+      }, "image/png");
+    };
+    img.onerror = () => reject(f.name);
+    img.src = url;
+  });
+}
+
+async function saveAll() {
+  const spec = state.img ? badgeSpec(state.img.naturalWidth, state.img.naturalHeight) : null;
+  saveBtn.disabled = true;
+  let ok = 0, fail = 0;
+  for (const f of state.files) {
+    try { await saveOne(f, spec); ok++; } catch { fail++; }
+    await new Promise(r => setTimeout(r, 300));
+  }
+  saveBtn.disabled = false;
+  setStatus(T().saved(ok, fail), fail ? "err" : "ok");
+}
+
+$("lang").onchange = e => { state.lang = e.target.value; applyLang(); };
+$("pickBtn").onclick = () => fileInput.click();
+fileInput.onchange = () => loadFiles(fileInput.files);
+drop.onclick = () => fileInput.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); loadFiles(e.dataTransfer.files); };
+
+["size", "margin", "alpha"].forEach(id => $(id).oninput = () => {
+  $("sizeVal").textContent = $("size").value + "%";
+  $("marginVal").textContent = $("margin").value + "%";
+  $("alphaVal").textContent = $("alpha").value + "%";
+  if (state.img) drawPreview();
+});
+["corner", "color"].forEach(id => $(id).onchange = () => { if (state.img) drawPreview(); });
+document.querySelectorAll(".badge-style button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".badge-style button").forEach(x => x.classList.remove("active"));
+  b.classList.add("active");
+  state.style = b.dataset.style;
+  if (state.img) drawPreview();
+});
+
+saveBtn.onclick = saveAll;
+
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowRight" && state.idx < state.files.length - 1) showImage(state.idx + 1);
+  if (e.key === "ArrowLeft" && state.idx > 0) showImage(state.idx - 1);
+});
+
+applyLang();
+</script>
+</body>
+</html>
